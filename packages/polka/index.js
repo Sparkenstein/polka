@@ -3,20 +3,53 @@ const Router = require('trouter');
 const { parse } = require('querystring');
 const parser = require('@polka/url');
 
+/**
+ * Check if the given charecter starts with `/`
+ * Otherwise append `/` to the front.
+ * @param {string} x input string
+ * @example 
+ * lead ('a')  => '/a';
+ * lead('/d')  => '/d';
+ */
 function lead(x) {
 	return x.charCodeAt(0) === 47 ? x : ('/' + x);
 }
 
+/**
+ * Returns the value of substring in a path
+ * @param {string} x input string
+ * @example
+ * value('abc/test/xyz')  => 'abc';
+ * value('/pqr/mnb')  => '/pqr';
+ */
 function value(x) {
   let y = x.indexOf('/', 1);
   return y > 1 ? x.substring(0, y) : x;
 }
 
+/**
+ * Mutates the gives request object by replacing
+ * `req.url` and `req.path` values.
+ * works same like removing first `str` number of
+ * letters from given string for URL. 
+ * else replace it with `/`
+ * @param {string} str the string to mutate with
+ * @param {object} req the req objet to mutate
+ * @example 
+ * mutate('google', {url:'google.com/api/search'}) => {url: '.com/api/search'}
+ */
 function mutate(str, req) {
 	req.url = req.url.substring(str.length) || '/';
 	req.path = req.path.substring(str.length) || '/';
 }
 
+/**
+ * Error handler
+ * @param {object} err error object
+ * @param {object} req request object
+ * @param {object} res response object
+ * @param {object} next next middleware
+ */
 function onError(err, req, res, next) {
 	let code = (res.statusCode = err.code || err.status || 500);
 	res.end(err.length && err || err.message || http.STATUS_CODES[code]);
@@ -26,13 +59,13 @@ class Polka extends Router {
 	constructor(opts={}) {
 		super(opts);
 		this.apps = {};
-		this.wares = [];
+		this.wares = [];	// Middlewares
 		this.bwares = {};
 		this.parse = parser;
 		this.server = opts.server;
 		this.handler = this.handler.bind(this);
 		this.onError = opts.onError || onError; // catch-all handler
-		this.onNoMatch = opts.onNoMatch || this.onError.bind(null, { code:404 });
+		this.onNoMatch = opts.onNoMatch || this.onError.bind(null, { code:404 });	// Default 404
 	}
 
 	add(method, pattern, ...fns) {
@@ -41,6 +74,19 @@ class Polka extends Router {
 		return super.add(method, pattern, ...fns);
 	}
 
+	/**
+	 * Add middlewares or other sub applications
+	 * to the existing application. if first 
+	 * parameter is a function, or just `/` push
+	 * it to the wares array, else push them
+	 * to apps or bwares objects according to
+	 * the `instanceof` value
+	 * @param {string} base the base path where	the following middleware is supposed to mount
+	 * @param  {...any} fns array of middleware functions/polka apps
+	 * @example
+	 * polka().use(validateUser, login)
+	 * polka().use('/users', addUser)
+	 */
 	use(base, ...fns) {
 		if (typeof base === 'function') {
 			this.wares = this.wares.concat(base, fns);
@@ -60,7 +106,13 @@ class Polka extends Router {
 		}
 		return this; // chainable
 	}
-
+	 
+	/**
+	 * Wrapper around native http.createServer()
+	 * Create a new server if opts.server is 
+	 * undefined/not given. Otherwise listen on 
+	 * the given port
+	 */
 	listen() {
 		(this.server = this.server || http.createServer()).on('request', this.handler);
 		this.server.listen.apply(this.server, arguments);
